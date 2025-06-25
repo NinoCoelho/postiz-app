@@ -93,8 +93,8 @@ export function useUppyUploader(props: {
               );
               uppy2.log(error.message, 'error');
               uppy2.info(error.message, 'error', 5000);
-              toast.show(
-                `Image file is too large. Maximum size allowed is 30MB.`
+              toast.showError(
+                `🖼️ Image file "${file.name}" is too large! Maximum size is 30MB, but your file is ${(file.size / (1024 * 1024)).toFixed(1)}MB.`
               );
               uppy2.removeFile(file.id); // Remove file from queue
               return reject(error);
@@ -106,8 +106,8 @@ export function useUppyUploader(props: {
               );
               uppy2.log(error.message, 'error');
               uppy2.info(error.message, 'error', 5000);
-              toast.show(
-                `Video file is too large. Maximum size allowed is 1GB.`
+              toast.showError(
+                `🎥 Video file "${file.name}" is too large! Maximum size is 1GB, but your file is ${(file.size / (1024 * 1024 * 1024)).toFixed(1)}GB.`
               );
               uppy2.removeFile(file.id); // Remove file from queue
               return reject(error);

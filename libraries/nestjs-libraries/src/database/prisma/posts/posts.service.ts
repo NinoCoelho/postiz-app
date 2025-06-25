@@ -288,38 +288,74 @@ export class PostsService {
         });
       }
     } catch (err: any) {
+      // Enhanced error logging with more visibility
+      const errorDetails = {
+        postId: firstPost.id,
+        platform: firstPost.integration?.providerIdentifier,
+        channelName: firstPost.integration?.name,
+        error: {
+          message: err.message || 'Unknown error',
+          name: err.name || 'Error',
+          code: err.code,
+          stack: err.stack,
+        },
+        timestamp: new Date().toISOString(),
+        postData: {
+          type: firstPost.type,
+          group: firstPost.group,
+          submissionId: firstPost.submissionId,
+        }
+      };
+
+      console.error('🚨='.repeat(50));
+      console.error('🚨 CRITICAL POST ERROR');
+      console.error('🚨='.repeat(50));
+      console.error(`🚨 Platform: ${firstPost.integration?.providerIdentifier}`);
+      console.error(`🚨 Channel: ${firstPost.integration?.name}`);
+      console.error(`🚨 Post ID: ${firstPost.id}`);
+      console.error(`🚨 Error Type: ${err.name || 'Error'}`);
+      console.error(`🚨 Error Message: ${err.message || 'Unknown error'}`);
+      if (err.code) {
+        console.error(`🚨 Error Code: ${err.code}`);
+      }
+      console.error('🚨='.repeat(50));
+      console.error('🚨 FULL ERROR DETAILS:');
+      console.error(errorDetails);
+      console.error('🚨='.repeat(50));
+
       await this._postRepository.changeState(firstPost.id, 'ERROR', err);
       await this._notificationService.inAppNotification(
         firstPost.organizationId,
-        `Error posting on ${firstPost.integration?.providerIdentifier} for ${firstPost?.integration?.name}`,
-        `An error occurred while posting on ${
+        `❌ Error posting on ${firstPost.integration?.providerIdentifier} for ${firstPost?.integration?.name}`,
+        `⚠️ An error occurred while posting on ${
           firstPost.integration?.providerIdentifier
-        } ${
+        }. ${
           !process.env.NODE_ENV || process.env.NODE_ENV === 'development'
-            ? err
-            : ''
+            ? `Error details: ${err.message || err}`
+            : 'Please check the logs for more details.'
         }`,
         true
       );
 
       if (err instanceof BadBody) {
-        console.error(
-          '[Error] posting on',
-          firstPost.integration?.providerIdentifier,
-          err.identifier,
-          err.json,
-          err.body,
-          err
-        );
-
+        console.error('🚨 BAD BODY ERROR DETAILS:');
+        console.error({
+          platform: firstPost.integration?.providerIdentifier,
+          identifier: err.identifier,
+          jsonResponse: err.json,
+          bodyData: err.body,
+          fullError: err,
+          timestamp: new Date().toISOString()
+        });
         return;
       }
 
-      console.error(
-        '[Error] posting on',
-        firstPost.integration?.providerIdentifier,
-        err
-      );
+      console.error('🚨 GENERIC ERROR DETAILS:');
+      console.error({
+        platform: firstPost.integration?.providerIdentifier,
+        error: err,
+        timestamp: new Date().toISOString()
+      });
     }
   }
 

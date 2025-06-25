@@ -3,42 +3,66 @@
 import { useCallback, useEffect, useState } from 'react';
 import EventEmitter from 'events';
 import clsx from 'clsx';
+
 const toaster = new EventEmitter();
+
 export const Toaster = () => {
   const [showToaster, setShowToaster] = useState(false);
   const [toasterText, setToasterText] = useState('');
-  const [toasterType, setToasterType] = useState<'success' | 'warning' | ''>(
-    ''
-  );
+  const [toasterType, setToasterType] = useState<'success' | 'warning' | 'error' | 'critical' | ''>('');
+  const [autoHide, setAutoHide] = useState(true);
+
   useEffect(() => {
     toaster.on(
       'show',
-      (params: { text: string; type?: 'success' | 'warning' }) => {
-        const { text, type } = params;
+      (params: { text: string; type?: 'success' | 'warning' | 'error' | 'critical'; autoHide?: boolean }) => {
+        const { text, type, autoHide: shouldAutoHide } = params;
         setToasterText(text);
         setToasterType(type || 'success');
+        setAutoHide(shouldAutoHide !== false);
         setShowToaster(true);
-        setTimeout(() => {
-          setShowToaster(false);
-        }, 4200);
+        
+        // Auto-hide timeout based on error type
+        if (shouldAutoHide !== false) {
+          const timeout = type === 'critical' ? 8000 : type === 'error' ? 6000 : 4200;
+          setTimeout(() => {
+            setShowToaster(false);
+          }, timeout);
+        }
       }
     );
     return () => {
       toaster.removeAllListeners();
     };
   }, []);
+
+  const handleClose = useCallback(() => {
+    setShowToaster(false);
+  }, []);
+
   if (!showToaster) {
     return <></>;
   }
-  return (
-    <div
-      className={clsx(
-        'animate-fadeDown rounded-[8px] gap-[18px] flex items-center overflow-hidden bg-customColor8 p-[16px] min-w-[319px] fixed start-[50%] text-white z-[300] top-[32px] -translate-x-[50%] h-[56px]',
-        toasterType === 'success' ? 'shadow-greenToast' : 'shadow-yellowToast'
-      )}
-    >
-      <div>
-        {toasterType === 'success' ? (
+
+  const getToasterStyles = () => {
+    switch (toasterType) {
+      case 'success':
+        return 'shadow-greenToast bg-customColor8';
+      case 'warning':
+        return 'shadow-yellowToast bg-customColor8';
+      case 'error':
+        return 'shadow-redToast bg-red-900 border border-red-500';
+      case 'critical':
+        return 'shadow-redToast bg-red-800 border-2 border-red-400 animate-pulse';
+      default:
+        return 'shadow-greenToast bg-customColor8';
+    }
+  };
+
+  const getIcon = () => {
+    switch (toasterType) {
+      case 'success':
+        return (
           <svg
             xmlns="http://www.w3.org/2000/svg"
             width="24"
@@ -51,7 +75,9 @@ export const Toaster = () => {
               fill="#6CE9A6"
             />
           </svg>
-        ) : (
+        );
+      case 'warning':
+        return (
           <svg
             xmlns="http://www.w3.org/2000/svg"
             width="24"
@@ -64,9 +90,81 @@ export const Toaster = () => {
               fill="#FEC84B"
             />
           </svg>
-        )}
+        );
+      case 'error':
+      case 'critical':
+        return (
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+          >
+            <path
+              d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"
+              fill="#FF6B6B"
+            />
+            <path
+              d="M15.5 4L12 10.5 8.5 4H15.5Z"
+              fill="#FF4444"
+            />
+          </svg>
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div
+      className={clsx(
+        'animate-fadeDown rounded-[8px] gap-[18px] flex items-center overflow-hidden p-[16px] min-w-[319px] fixed start-[50%] text-white z-[400] top-[32px] -translate-x-[50%] min-h-[56px]',
+        getToasterStyles(),
+        toasterType === 'critical' && 'ring-2 ring-red-400 ring-opacity-75'
+      )}
+    >
+      <div className="flex-shrink-0">
+        {getIcon()}
       </div>
-      <div className="flex-1 text-textColor">{toasterText}</div>
+      <div className="flex-1 text-textColor font-medium">
+        {toasterType === 'critical' && (
+          <div className="text-red-200 text-xs uppercase font-bold mb-1">
+            🚨 CRITICAL ERROR
+          </div>
+        )}
+        {toasterType === 'error' && (
+          <div className="text-red-200 text-xs uppercase font-bold mb-1">
+            ❌ ERROR
+          </div>
+        )}
+        <div className={toasterType === 'critical' ? 'text-red-100' : ''}>{toasterText}</div>
+      </div>
+      
+      {/* Manual close button for errors */}
+      {(toasterType === 'error' || toasterType === 'critical') && (
+        <button
+          onClick={handleClose}
+          className="flex-shrink-0 ml-2 text-white hover:text-red-200 transition-colors"
+          aria-label="Close error"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      )}
+      
       <svg
         xmlns="http://www.w3.org/2000/svg"
         width="60"
@@ -81,7 +179,13 @@ export const Toaster = () => {
             cy="28"
             rx="28"
             ry="13"
-            fill={toasterType === 'success' ? '#6CE9A6' : '#FEC84B'}
+            fill={
+              toasterType === 'success' ? '#6CE9A6' :
+              toasterType === 'warning' ? '#FEC84B' :
+              toasterType === 'error' ? '#FF6B6B' :
+              toasterType === 'critical' ? '#FF4444' :
+              '#6CE9A6'
+            }
           />
         </g>
         <defs>
@@ -111,12 +215,28 @@ export const Toaster = () => {
     </div>
   );
 };
+
 export const useToaster = () => {
   return {
-    show: useCallback((text: string, type?: 'success' | 'warning') => {
+    show: useCallback((text: string, type?: 'success' | 'warning' | 'error' | 'critical', autoHide?: boolean) => {
       toaster.emit('show', {
         text,
         type,
+        autoHide,
+      });
+    }, []),
+    showError: useCallback((text: string, critical = false) => {
+      toaster.emit('show', {
+        text,
+        type: critical ? 'critical' : 'error',
+        autoHide: !critical, // Critical errors require manual dismissal
+      });
+    }, []),
+    showCritical: useCallback((text: string) => {
+      toaster.emit('show', {
+        text,
+        type: 'critical',
+        autoHide: false, // Requires manual dismissal
       });
     }, []),
   };

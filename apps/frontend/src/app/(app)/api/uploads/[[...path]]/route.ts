@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createReadStream, statSync } from 'fs';
+import { createReadStream, statSync, existsSync } from 'fs';
 // @ts-ignore
 import mime from 'mime';
+
 async function* nodeStreamToIterator(stream: any) {
   for await (const chunk of stream) {
     yield chunk;
   }
 }
+
 function iteratorToStream(iterator: any) {
   return new ReadableStream({
     async pull(controller) {
@@ -19,6 +21,7 @@ function iteratorToStream(iterator: any) {
     },
   });
 }
+
 export const GET = (
   request: NextRequest,
   context: {
@@ -27,22 +30,57 @@ export const GET = (
     };
   }
 ) => {
-  const filePath =
-    process.env.UPLOAD_DIRECTORY + '/' + context.params.path.join('/');
-  const response = createReadStream(filePath);
-  const fileStats = statSync(filePath);
-  const contentType = mime.getType(filePath) || 'application/octet-stream';
-  const iterator = nodeStreamToIterator(response);
-  const webStream = iteratorToStream(iterator);
-  return new Response(webStream, {
-    headers: {
-      'Content-Type': contentType,
-      // Set the appropriate content-type header
-      'Content-Length': fileStats.size.toString(),
-      // Set the content-length header
-      'Last-Modified': fileStats.mtime.toUTCString(),
-      // Set the last-modified header
-      'Cache-Control': 'public, max-age=31536000, immutable', // Example cache-control header
-    },
-  });
+  try {
+    const filePath =
+      process.env.UPLOAD_DIRECTORY + '/' + context.params.path.join('/');
+    
+    // Check if file exists first
+    if (!existsSync(filePath)) {
+      console.error(`🚨 [UPLOAD ERROR] File not found: ${filePath}`);
+      return NextResponse.json(
+        { 
+          error: 'File not found',
+          message: `The requested file does not exist: ${context.params.path.join('/')}`,
+          path: context.params.path.join('/'),
+          timestamp: new Date().toISOString()
+        },
+        { status: 404 }
+      );
+    }
+
+    const fileStats = statSync(filePath);
+    const contentType = mime.getType(filePath) || 'application/octet-stream';
+    const response = createReadStream(filePath);
+    
+    const iterator = nodeStreamToIterator(response);
+    const webStream = iteratorToStream(iterator);
+    
+    return new Response(webStream, {
+      headers: {
+        'Content-Type': contentType,
+        'Content-Length': fileStats.size.toString(),
+        'Last-Modified': fileStats.mtime.toUTCString(),
+        'Cache-Control': 'public, max-age=31536000, immutable',
+      },
+    });
+  } catch (error: any) {
+    console.error(`🚨 [UPLOAD ERROR] Failed to serve file:`, {
+      path: context.params.path.join('/'),
+      error: error.message,
+      code: error.code,
+      timestamp: new Date().toISOString()
+    });
+    
+    // Return detailed error response
+    return NextResponse.json(
+      {
+        error: 'Failed to serve file',
+        message: error.message,
+        code: error.code,
+        path: context.params.path.join('/'),
+        timestamp: new Date().toISOString()
+      },
+      { status: 500 }
+    );
+  }
 };
