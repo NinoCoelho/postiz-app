@@ -62,3 +62,8 @@ uploads/
 # Build Scripts
 build-and-deploy*.sh
 my-postiz.tar
+
+# Video fix tools
+fix-instagram-video.sh
+fixed_instagram_video.mp4
+cleanup_orphan_data.sql
