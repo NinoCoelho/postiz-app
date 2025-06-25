@@ -301,9 +301,10 @@ export class PostsService {
         },
         timestamp: new Date().toISOString(),
         postData: {
-          type: firstPost.type,
+          id: firstPost.id,
           group: firstPost.group,
-          submissionId: firstPost.submissionId,
+          state: firstPost.state,
+          publishDate: firstPost.publishDate,
         }
       };
 
