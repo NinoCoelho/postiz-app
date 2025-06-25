@@ -226,8 +226,10 @@ export class YoutubeProvider extends SocialAbstract implements SocialProvider {
       ) {
         throw 'You have to link your youtube account to your google account first.';
       }
+      
+      // Re-throw any other unhandled errors
+      throw err;
     }
-    return [];
   }
 
   async analytics(
