@@ -1,19 +1,33 @@
 import { useFetch } from '@gitroom/helpers/utils/custom.fetch';
-import { useCallback } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useToaster } from '@gitroom/react/toaster/toaster';
 
 export const useCustomProviderFunction = () => {
   const fetch = useFetch();
   const toaster = useToaster();
 
-  return useCallback(async (body: any, integrationId: string) => {
+  const makeRequest = useCallback(async (method: string, endpoint: string, body?: any, integrationId?: string) => {
     try {
-      const response = await fetch(`/integrations/article/${integrationId}`, {
-        method: 'POST',
-        body: JSON.stringify(body),
+      const requestOptions: RequestInit = {
+        method,
         headers: {
           'Content-Type': 'application/json',
         },
+      };
+
+      if (body && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
+        requestOptions.body = JSON.stringify(body);
+      }
+
+      const response = await fetch(`/integrations/function`, {
+        ...requestOptions,
+        method: 'POST',
+        body: JSON.stringify({
+          integrationId,
+          method,
+          endpoint,
+          body,
+        }),
       });
 
       if (!response.ok) {
@@ -22,6 +36,8 @@ export const useCustomProviderFunction = () => {
         // Enhanced error logging
         console.error(`🚨 [PROVIDER ERROR] Custom provider failed:`, {
           integrationId,
+          method,
+          endpoint,
           status: response.status,
           statusText: response.statusText,
           errorData,
@@ -52,6 +68,8 @@ export const useCustomProviderFunction = () => {
       // Network or other unexpected errors
       console.error(`🚨 [NETWORK ERROR] Custom provider network failure:`, {
         integrationId,
+        method,
+        endpoint,
         error: error.message,
         name: error.name,
         stack: error.stack,
@@ -68,4 +86,13 @@ export const useCustomProviderFunction = () => {
       throw error;
     }
   }, [fetch, toaster]);
+
+  // Return API methods
+  return useMemo(() => ({
+    get: (endpoint: string, integrationId?: string) => makeRequest('GET', endpoint, undefined, integrationId),
+    post: (endpoint: string, body?: any, integrationId?: string) => makeRequest('POST', endpoint, body, integrationId),
+    put: (endpoint: string, body?: any, integrationId?: string) => makeRequest('PUT', endpoint, body, integrationId),
+    patch: (endpoint: string, body?: any, integrationId?: string) => makeRequest('PATCH', endpoint, body, integrationId),
+    delete: (endpoint: string, integrationId?: string) => makeRequest('DELETE', endpoint, undefined, integrationId),
+  }), [makeRequest]);
 };

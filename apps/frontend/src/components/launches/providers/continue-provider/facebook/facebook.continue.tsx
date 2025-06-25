@@ -17,12 +17,12 @@ export const FacebookContinue: FC<{
   const fetch = useFetch();
   const loadPages = useCallback(async () => {
     try {
-      const pages = await call.get('pages');
+      const pages = await call.get('pages', integration?.id);
       return pages;
     } catch (e) {
       closeModal();
     }
-  }, []);
+  }, [integration?.id]);
   const setPage = useCallback(
     (id: string) => () => {
       setSelectedPage(id);

@@ -76,7 +76,7 @@ export const Subreddit: FC<{
   const setResult = (result: { id: string; name: string }) => async () => {
     setLoading(true);
     setSearchValue('');
-    const restrictions = await func.get('restrictions', {
+    const restrictions = await func.post('restrictions', {
       subreddit: result.name,
     });
     onChange({
@@ -170,7 +170,7 @@ export const Subreddit: FC<{
         return;
       }
       // @ts-ignore
-      const results = await func.get('subreddits', { word: e.target.value });
+      const results = await func.post('subreddits', { word: e.target.value });
       // @ts-ignore
       setResults(results);
     }, []),

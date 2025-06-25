@@ -30,6 +30,53 @@ export class InstagramProvider
     'instagram_manage_insights',
   ];
 
+  /**
+   * Validates and potentially reprocesses video for Instagram compatibility
+   */
+  private async validateAndProcessVideo(videoUrl: string): Promise<{ isValid: boolean; processedUrl?: string; error?: string }> {
+    try {
+      // Check if video is accessible
+      const response = await fetch(videoUrl, { method: 'HEAD' });
+      if (!response.ok) {
+        return { isValid: false, error: `Video not accessible: ${response.status}` };
+      }
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType?.includes('video/mp4') && !contentType?.includes('video/quicktime')) {
+        return { isValid: false, error: `Unsupported content type: ${contentType}` };
+      }
+
+      // For now, return the original URL as valid
+      // In the future, this could trigger video reprocessing if needed
+      return { isValid: true, processedUrl: videoUrl };
+    } catch (error: any) {
+      return { isValid: false, error: `Video validation failed: ${error.message}` };
+    }
+  }
+
+  /**
+   * Enhanced error handling for Instagram video uploads
+   */
+  private handleInstagramVideoError(error: any, videoUrl: string): string {
+    if (error?.json) {
+      const errorData = JSON.parse(error.json);
+      const fbError = errorData?.error;
+      
+      if (fbError?.code === 352 && fbError?.error_subcode === 2207026) {
+        return `Instagram video format error: ${fbError.message}. ` +
+               `Video URL: ${videoUrl}. ` +
+               `This may be due to container format issues. Try re-encoding the video with standard settings: ` +
+               `H.264 video codec, AAC audio, MP4 container, 9:16 aspect ratio (1080x1920), max 30fps.`;
+      }
+      
+      if (fbError?.code === 352) {
+        return `Instagram video upload error (${fbError.code}/${fbError.error_subcode}): ${fbError.message}`;
+      }
+    }
+    
+    return `Instagram video upload failed: ${error.message || 'Unknown error'}`;
+  }
+
   async refreshToken(refresh_token: string): Promise<AuthTokenDetails> {
     return {
       refreshToken: '',
@@ -212,8 +259,21 @@ export class InstagramProvider
   ): Promise<PostResponse[]> {
     try {
       const [firstPost, ...theRest] = postDetails;
-      console.log('in progress');
+      console.log('Instagram post in progress...');
       const isStory = firstPost.settings.post_type === 'story';
+      
+      // Validate videos before uploading
+      if (firstPost?.media?.some(m => m.url.indexOf('.mp4') > -1)) {
+        console.log('Validating Instagram video formats...');
+        for (const media of firstPost.media.filter(m => m.url.indexOf('.mp4') > -1)) {
+          const validation = await this.validateAndProcessVideo(media.url);
+          if (!validation.isValid) {
+            throw new Error(`Video validation failed: ${validation.error}`);
+          }
+          console.log(`Video validation passed for: ${media.url}`);
+        }
+      }
+      
       const medias = await Promise.all(
         firstPost?.media?.map(async (m) => {
           const caption =
@@ -234,7 +294,7 @@ export class InstagramProvider
               : isStory
               ? `image_url=${m.url}&media_type=STORIES`
               : `image_url=${m.url}`;
-          console.log('in progress1');
+          console.log('Creating Instagram media container...');
 
           const collaborators =
             firstPost?.settings?.collaborators?.length && !isStory
@@ -243,30 +303,55 @@ export class InstagramProvider
                 )}`
               : ``;
 
-          console.log(collaborators);
-          const { id: photoId } = await (
-            await this.fetch(
-              `https://${type}/v20.0/${id}/media?${mediaType}${isCarousel}${collaborators}&access_token=${accessToken}${caption}`,
-              {
-                method: 'POST',
-              }
-            )
-          ).json();
-          console.log('in progress2');
-
-          let status = 'IN_PROGRESS';
-          while (status === 'IN_PROGRESS') {
-            const { status_code } = await (
+          console.log('Collaborators:', collaborators);
+          
+          try {
+            const { id: photoId } = await (
               await this.fetch(
-                `https://${type}/v20.0/${photoId}?access_token=${accessToken}&fields=status_code`
+                `https://${type}/v20.0/${id}/media?${mediaType}${isCarousel}${collaborators}&access_token=${accessToken}${caption}`,
+                {
+                  method: 'POST',
+                }
               )
             ).json();
-            await timer(3000);
-            status = status_code;
-          }
-          console.log('in progress3');
+            console.log('Media container created:', photoId);
 
-          return photoId;
+            let status = 'IN_PROGRESS';
+            let attempts = 0;
+            const maxAttempts = 20; // Maximum 60 seconds wait time
+            
+            while (status === 'IN_PROGRESS' && attempts < maxAttempts) {
+              const { status_code } = await (
+                await this.fetch(
+                  `https://${type}/v20.0/${photoId}?access_token=${accessToken}&fields=status_code`
+                )
+              ).json();
+              await timer(3000);
+              status = status_code;
+              attempts++;
+              console.log(`Media processing status: ${status} (attempt ${attempts}/${maxAttempts})`);
+            }
+            
+            if (status === 'IN_PROGRESS') {
+              throw new Error('Instagram media processing timeout after 60 seconds');
+            }
+            
+            if (status === 'ERROR') {
+              throw new Error('Instagram media processing failed');
+            }
+            
+            console.log('Media processing completed successfully');
+            return photoId;
+            
+          } catch (uploadError) {
+            // Enhanced error handling for video uploads
+            if (m.url.indexOf('.mp4') > -1) {
+              const errorMessage = this.handleInstagramVideoError(uploadError, m.url);
+              console.error('Instagram video upload error:', errorMessage);
+              throw new Error(errorMessage);
+            }
+            throw uploadError;
+          }
         }) || []
       );
 
@@ -374,8 +459,14 @@ export class InstagramProvider
 
       return arr;
     } catch (err: any) {
-      // Re-throw the error instead of returning empty array or undefined
-      // This ensures proper error handling up the chain
+      // Enhanced error logging and handling
+      console.error('Instagram post error:', {
+        error: err.message,
+        stack: err.stack,
+        postDetailsCount: postDetails?.length || 0
+      });
+      
+      // Re-throw the error instead of returning empty array
       throw err;
     }
   }

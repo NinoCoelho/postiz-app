@@ -20,12 +20,12 @@ export const InstagramContinue: FC<{
   const fetch = useFetch();
   const loadPages = useCallback(async () => {
     try {
-      const pages = await call.get('pages');
+      const pages = await call.get('pages', integration?.id);
       return pages;
     } catch (e) {
       closeModal();
     }
-  }, []);
+  }, [integration?.id]);
   const t = useT();
 
   const setPage = useCallback(

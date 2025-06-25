@@ -22,12 +22,12 @@ export const LinkedinContinue: FC<{
   const fetch = useFetch();
   const loadPages = useCallback(async () => {
     try {
-      const pages = await call.get('companies');
+      const pages = await call.get('companies', integration?.id);
       return pages;
     } catch (e) {
       closeModal();
     }
-  }, []);
+  }, [integration?.id]);
   const setPage = useCallback(
     (param: { id: string; pageId: string }) => () => {
       setSelectedPage(param);
