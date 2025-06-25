@@ -324,17 +324,51 @@ export class PostsService {
       console.error('🚨='.repeat(50));
 
       await this._postRepository.changeState(firstPost.id, 'ERROR', err);
+
+      // Extract meaningful error message from different error types
+      let errorMessage = 'Unknown error occurred';
+      let userFriendlyMessage = '';
+      
+      if (err?.error?.message) {
+        // Instagram/Facebook API error format
+        errorMessage = err.error.message;
+        userFriendlyMessage = err.error.error_user_msg || err.error.message;
+        
+        // Special handling for common Instagram errors
+        if (err.error.code === 352 && err.error.error_subcode === 2207026) {
+          userFriendlyMessage = `🎥 Video format not supported. Please try a different video format (MP4, H.264, max 60 seconds, 30 FPS).`;
+        }
+      } else if (err?.message) {
+        // Standard JavaScript Error
+        errorMessage = err.message;
+        userFriendlyMessage = err.message;
+      } else if (typeof err === 'string') {
+        // String error
+        errorMessage = err;
+        userFriendlyMessage = err;
+      } else if (err && typeof err === 'object') {
+        // Try to extract useful info from object
+        errorMessage = JSON.stringify(err);
+        userFriendlyMessage = 'An error occurred while posting. Please check the format and try again.';
+      }
+
+      // Create detailed notification for users
+      const detailedMessage = `⚠️ Error posting to ${firstPost.integration?.providerIdentifier}:
+
+🔹 Platform: ${firstPost.integration?.providerIdentifier}
+🔹 Channel: ${firstPost.integration?.name}
+🔹 Error: ${userFriendlyMessage}
+
+${!process.env.NODE_ENV || process.env.NODE_ENV === 'development' 
+  ? `\n🔧 Technical details: ${errorMessage}` 
+  : '\n📞 If this issue persists, please contact support.'
+}`;
+
       await this._notificationService.inAppNotification(
         firstPost.organizationId,
-        `❌ Error posting on ${firstPost.integration?.providerIdentifier} for ${firstPost?.integration?.name}`,
-        `⚠️ An error occurred while posting on ${
-          firstPost.integration?.providerIdentifier
-        }. ${
-          !process.env.NODE_ENV || process.env.NODE_ENV === 'development'
-            ? `Error details: ${err.message || err}`
-            : 'Please check the logs for more details.'
-        }`,
-        true
+        `❌ Error posting to ${firstPost.integration?.providerIdentifier}`,
+        detailedMessage,
+        true // Send email for all posting errors
       );
 
       if (err instanceof BadBody) {

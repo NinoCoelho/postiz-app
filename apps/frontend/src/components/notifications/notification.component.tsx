@@ -16,6 +16,7 @@ function replaceLinks(text: string) {
     '<a class="cursor-pointer underline font-bold" target="_blank" href="$1">$1</a>'
   );
 }
+
 export const ShowNotification: FC<{
   notification: {
     createdAt: string;
@@ -27,18 +28,73 @@ export const ShowNotification: FC<{
   const [newNotification] = useState(
     new Date(notification.createdAt) > new Date(props.lastReadNotification)
   );
+
+  // Detect if this is an error notification
+  const isError = notification.content.includes('❌') || 
+                  notification.content.includes('⚠️') || 
+                  notification.content.includes('Error posting');
+  
+  const isCritical = notification.content.includes('🚨') || 
+                     notification.content.includes('Critical');
+
   return (
     <div
       className={clsx(
-        `text-textColor px-[16px] py-[10px] border-b border-tableBorder last:border-b-0 transition-colors ${interClass} overflow-hidden text-ellipsis`,
-        newNotification && 'font-bold bg-seventh animate-newMessages'
+        `text-textColor px-[16px] py-[12px] border-b border-tableBorder last:border-b-0 transition-colors ${interClass} overflow-hidden`,
+        newNotification && 'font-bold animate-newMessages',
+        isError && 'bg-red-900/20 border-red-500/30',
+        isCritical && 'bg-red-800/30 border-red-400/50 animate-pulse',
+        !isError && 'bg-seventh'
       )}
-      dangerouslySetInnerHTML={{
-        __html: replaceLinks(notification.content),
-      }}
-    />
+    >
+      {/* Error icon and timestamp */}
+      <div className="flex items-start gap-3 mb-2">
+        {isError && (
+          <div className="flex-shrink-0 mt-1">
+            {isCritical ? (
+              <div className="w-6 h-6 bg-red-600 rounded-full flex items-center justify-center animate-pulse">
+                <span className="text-white text-xs">🚨</span>
+              </div>
+            ) : (
+              <div className="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center">
+                <span className="text-white text-xs">❌</span>
+              </div>
+            )}
+          </div>
+        )}
+        
+        <div className="flex-1">
+          {isError && (
+            <div className="mb-2">
+              <span className={clsx(
+                "text-xs font-bold uppercase tracking-wide px-2 py-1 rounded",
+                isCritical ? "bg-red-700 text-red-100" : "bg-red-600 text-red-100"
+              )}>
+                {isCritical ? "🚨 Critical Error" : "❌ Error"}
+              </span>
+            </div>
+          )}
+          
+          {/* Content with improved formatting for errors */}
+          <div 
+            className={clsx(
+              "notification-content",
+              isError && "text-red-100 font-medium"
+            )}
+            dangerouslySetInnerHTML={{
+              __html: replaceLinks(notification.content),
+            }}
+          />
+        </div>
+        
+        <div className="flex-shrink-0 text-xs text-gray-400">
+          {new Date(notification.createdAt).toLocaleTimeString()}
+        </div>
+      </div>
+    </div>
   );
 };
+
 export const NotificationOpenComponent = () => {
   const fetch = useFetch();
   const loadNotifications = useCallback(async () => {
@@ -89,6 +145,7 @@ export const NotificationOpenComponent = () => {
     </div>
   );
 };
+
 const NotificationComponent = () => {
   const fetch = useFetch();
   const [show, setShow] = useState(false);
@@ -134,4 +191,5 @@ const NotificationComponent = () => {
     </div>
   );
 };
+
 export default NotificationComponent;
