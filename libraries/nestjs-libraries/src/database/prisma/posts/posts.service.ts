@@ -328,27 +328,51 @@ export class PostsService {
       // Extract meaningful error message from different error types
       let errorMessage = 'Unknown error occurred';
       let userFriendlyMessage = '';
+      let errorSource = err;
       
-      if (err?.error?.message) {
+      // Handle BadBody errors specifically
+      if (err instanceof BadBody) {
+        console.error('🚨 BAD BODY ERROR DETAILS:');
+        console.error({
+          platform: firstPost.integration?.providerIdentifier,
+          identifier: err.identifier,
+          jsonResponse: err.json,
+          bodyData: err.body,
+          fullError: err,
+          timestamp: new Date().toISOString()
+        });
+        
+        // Try to parse the JSON from BadBody to extract the real error
+        try {
+          if (err.json) {
+            const parsedError = JSON.parse(err.json);
+            errorSource = parsedError;
+          }
+        } catch (parseError) {
+          console.error('🚨 Failed to parse BadBody JSON:', parseError);
+        }
+      }
+      
+      if (errorSource?.error?.message) {
         // Instagram/Facebook API error format
-        errorMessage = err.error.message;
-        userFriendlyMessage = err.error.error_user_msg || err.error.message;
+        errorMessage = errorSource.error.message;
+        userFriendlyMessage = errorSource.error.error_user_msg || errorSource.error.message;
         
         // Special handling for common Instagram errors
-        if (err.error.code === 352 && err.error.error_subcode === 2207026) {
+        if (errorSource.error.code === 352 && errorSource.error.error_subcode === 2207026) {
           userFriendlyMessage = `🎥 Video format not supported. Please try a different video format (MP4, H.264, max 60 seconds, 30 FPS).`;
         }
-      } else if (err?.message) {
+      } else if (errorSource?.message) {
         // Standard JavaScript Error
-        errorMessage = err.message;
-        userFriendlyMessage = err.message;
-      } else if (typeof err === 'string') {
+        errorMessage = errorSource.message;
+        userFriendlyMessage = errorSource.message;
+      } else if (typeof errorSource === 'string') {
         // String error
-        errorMessage = err;
-        userFriendlyMessage = err;
-      } else if (err && typeof err === 'object') {
+        errorMessage = errorSource;
+        userFriendlyMessage = errorSource;
+      } else if (errorSource && typeof errorSource === 'object') {
         // Try to extract useful info from object
-        errorMessage = JSON.stringify(err);
+        errorMessage = JSON.stringify(errorSource);
         userFriendlyMessage = 'An error occurred while posting. Please check the format and try again.';
       }
 
@@ -371,25 +395,15 @@ ${!process.env.NODE_ENV || process.env.NODE_ENV === 'development'
         true // Send email for all posting errors
       );
 
-      if (err instanceof BadBody) {
-        console.error('🚨 BAD BODY ERROR DETAILS:');
+      // Don't return early for BadBody, we've already handled it above
+      if (!(err instanceof BadBody)) {
+        console.error('🚨 GENERIC ERROR DETAILS:');
         console.error({
           platform: firstPost.integration?.providerIdentifier,
-          identifier: err.identifier,
-          jsonResponse: err.json,
-          bodyData: err.body,
-          fullError: err,
+          error: err,
           timestamp: new Date().toISOString()
         });
-        return;
       }
-
-      console.error('🚨 GENERIC ERROR DETAILS:');
-      console.error({
-        platform: firstPost.integration?.providerIdentifier,
-        error: err,
-        timestamp: new Date().toISOString()
-      });
     }
   }
 
