@@ -9,7 +9,7 @@ interface VariableContextInterface {
   oauthDisplayName: string;
   frontEndUrl: string;
   plontoKey: string;
-  storageProvider: 'local' | 'cloudflare';
+  storageProvider: 'local' | 'cloudflare' | 's3';
   backendUrl: string;
   discordUrl: string;
   uploadDirectory: string;

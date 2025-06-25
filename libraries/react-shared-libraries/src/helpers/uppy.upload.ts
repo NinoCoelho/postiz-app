@@ -81,6 +81,15 @@ export const getUppyUploadPlugin = (
           withCredentials: true,
         },
       };
+    
+    case 's3':
+      return {
+        plugin: XHRUpload,
+        options: {
+          endpoint: `${backendUrl}/media/upload-server`,
+          withCredentials: true,
+        },
+      };
 
     // Add more cases for other cloud providers
     default:

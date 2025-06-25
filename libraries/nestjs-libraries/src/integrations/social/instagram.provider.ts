@@ -318,26 +318,54 @@ export class InstagramProvider
 
             let status = 'IN_PROGRESS';
             let attempts = 0;
-            const maxAttempts = 20; // Maximum 60 seconds wait time
+            const maxAttempts = 40; // Maximum 120 seconds wait time (increased for S3/MinIO)
             
             while (status === 'IN_PROGRESS' && attempts < maxAttempts) {
-              const { status_code } = await (
-                await this.fetch(
+              try {
+                const statusResponse = await this.fetch(
                   `https://${type}/v20.0/${photoId}?access_token=${accessToken}&fields=status_code`
-                )
-              ).json();
-              await timer(3000);
-              status = status_code;
-              attempts++;
-              console.log(`Media processing status: ${status} (attempt ${attempts}/${maxAttempts})`);
+                );
+                const statusData = await statusResponse.json();
+                
+                // Check for errors in the response
+                if (statusData.error) {
+                  console.error('Instagram status check error:', statusData.error);
+                  throw new Error(`Instagram API error: ${statusData.error.message}`);
+                }
+                
+                status = statusData.status_code;
+                attempts++;
+                console.log(`Media processing status: ${status} (attempt ${attempts}/${maxAttempts})`);
+                
+                // If status is still IN_PROGRESS, wait before next check
+                if (status === 'IN_PROGRESS') {
+                  await timer(3000);
+                }
+              } catch (statusError: any) {
+                console.error(`Status check failed (attempt ${attempts + 1}):`, statusError.message);
+                attempts++;
+                if (attempts >= maxAttempts) {
+                  throw new Error(`Instagram status check failed after ${maxAttempts} attempts: ${statusError.message}`);  
+                }
+                await timer(5000); // Wait longer on error
+              }
             }
             
             if (status === 'IN_PROGRESS') {
-              throw new Error('Instagram media processing timeout after 60 seconds');
+              throw new Error(`Instagram media processing timeout after ${maxAttempts * 3} seconds. This may be due to slow network connection to your S3/MinIO server.`);
             }
             
             if (status === 'ERROR') {
-              throw new Error('Instagram media processing failed');
+              // Try to get more detailed error information
+              try {
+                const errorResponse = await this.fetch(
+                  `https://${type}/v20.0/${photoId}?access_token=${accessToken}&fields=status_code,error_description`
+                );
+                const errorData = await errorResponse.json();
+                throw new Error(`Instagram media processing failed: ${errorData.error_description || 'Unknown error'}`);
+              } catch {
+                throw new Error('Instagram media processing failed');
+              }
             }
             
             console.log('Media processing completed successfully');

@@ -25,7 +25,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         <VariableContextComponent
           language="en"
           storageProvider={
-            process.env.STORAGE_PROVIDER! as 'local' | 'cloudflare'
+            process.env.STORAGE_PROVIDER! as 'local' | 'cloudflare' | 's3'
           }
           backendUrl={process.env.NEXT_PUBLIC_BACKEND_URL!}
           plontoKey={process.env.NEXT_PUBLIC_POLOTNO!}
