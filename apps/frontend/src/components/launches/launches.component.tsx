@@ -451,7 +451,7 @@ export const LaunchesComponent = () => {
                   {sortedIntegrations?.length > 0 && <NewPost />}
                   {sortedIntegrations?.length > 0 &&
                     user?.tier?.ai &&
-                    billingEnabled && <GeneratorComponent />}
+                    (billingEnabled || user?.tier?.current === 'ULTIMATE') && <GeneratorComponent />}
                 </div>
               </div>
               <div className="flex-1 flex flex-col gap-[14px]">

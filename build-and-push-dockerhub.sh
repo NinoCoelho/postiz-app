@@ -8,7 +8,7 @@ set -e  # Exit on any error
 # Configuration - UPDATE THESE VALUES
 DOCKERHUB_USERNAME="idemir"  # ⚠️ ALTERE PARA SEU USERNAME DO DOCKERHUB
 IMAGE_NAME="postiz-app"       # Nome da imagem no DockerHub
-VERSION_TAG="latest"          # Tag da versão (pode ser latest, v1.0.0, etc.)
+VERSION_TAG="nolimit"          # Tag da versão (pode ser latest, v1.0.0, etc.)
 BUILD_PLATFORMS="linux/amd64" # ,linux/arm64"  # Plataformas suportadas
 
 # Derived values
