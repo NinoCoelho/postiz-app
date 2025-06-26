@@ -38,20 +38,108 @@ export class InstagramProvider
       // Check if video is accessible
       const response = await fetch(videoUrl, { method: 'HEAD' });
       if (!response.ok) {
-        return { isValid: false, error: `Video not accessible: ${response.status}` };
+        return { isValid: false, error: `Video not accessible: HTTP ${response.status} - ${response.statusText}. Please check if the video URL is correct and accessible.` };
       }
 
       const contentType = response.headers.get('content-type');
-      if (!contentType?.includes('video/mp4') && !contentType?.includes('video/quicktime')) {
-        return { isValid: false, error: `Unsupported content type: ${contentType}` };
+      
+      // Enhanced content type validation
+      const isValidContentType = this.isValidVideoContentType(contentType, videoUrl);
+      if (!isValidContentType.isValid) {
+        return { isValid: false, error: isValidContentType.error };
       }
 
+      console.log(`✅ Video validation passed for: ${videoUrl} (Content-Type: ${contentType || 'detected from URL'})`);
+      
       // For now, return the original URL as valid
       // In the future, this could trigger video reprocessing if needed
       return { isValid: true, processedUrl: videoUrl };
     } catch (error: any) {
-      return { isValid: false, error: `Video validation failed: ${error.message}` };
+      return { isValid: false, error: `Video validation failed: ${error.message}. Please ensure the video is accessible from the internet.` };
     }
+  }
+
+  /**
+   * Enhanced content type validation with fallback detection
+   * Specifically handles cases where Caddy/nginx doesn't return content-type headers
+   */
+  private isValidVideoContentType(contentType: string | null, videoUrl: string): { isValid: boolean; error?: string } {
+    console.log(`🔍 Validating video: ${videoUrl} with Content-Type: ${contentType || 'null/missing'}`);
+    
+    // If content-type is provided and valid, use it
+    if (contentType) {
+      const validVideoTypes = [
+        'video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/avi',
+        'application/octet-stream', // Common for CDN files without proper MIME
+        'application/mp4', // Alternative MP4 MIME type
+        'video/mpeg', 'video/webm'
+      ];
+      
+      const isValidMimeType = validVideoTypes.some(type => contentType.toLowerCase().includes(type));
+      if (isValidMimeType) {
+        console.log(`✅ Valid Content-Type detected: ${contentType}`);
+        return { isValid: true };
+      }
+      
+      // If content-type is provided but not a valid video type, continue to URL-based validation
+      console.log(`⚠️ Unrecognized Content-Type: ${contentType}, falling back to URL validation`);
+    }
+
+    // Primary fallback: Check for video file extensions
+    const urlLower = videoUrl.toLowerCase();
+    const videoExtensions = ['.mp4', '.mov', '.avi', '.quicktime', '.m4v', '.3gp', '.webm'];
+    const hasVideoExtension = videoExtensions.some(ext => {
+      return urlLower.includes(ext) && (urlLower.endsWith(ext) || urlLower.includes(ext + '?') || urlLower.includes(ext + '#'));
+    });
+    
+    if (hasVideoExtension) {
+      console.log(`✅ Video extension detected in URL: ${videoUrl}`);
+      return { isValid: true };
+    }
+
+    // Secondary fallback: Check for video-related patterns in URL
+    const videoPatterns = [
+      'uploads',     // Common upload directory pattern
+      'media',       // Media storage pattern
+      'videos',      // Video storage pattern
+      'assets',      // Asset storage pattern
+      '/video/',     // Video path pattern
+      'cdn',         // CDN patterns
+      'storage'      // Storage patterns
+    ];
+    
+    const hasVideoPattern = videoPatterns.some(pattern => urlLower.includes(pattern.toLowerCase()));
+    if (hasVideoPattern && urlLower.includes('mp4')) {
+      console.log(`✅ Video-like URL pattern detected: ${videoUrl}`);
+      return { isValid: true };
+    }
+
+    // Final fallback: For specific domains that we know serve videos
+    const trustedDomains = [
+      'services.jornada.me',  // Your specific domain
+      'amazonaws.com',        // S3
+      'cloudfront.net',       // CloudFront
+      'googleusercontent.com', // Google storage
+      'blob.core.windows.net', // Azure storage
+      'digitaloceanspaces.com' // DigitalOcean spaces
+    ];
+    
+    const isTrustedDomain = trustedDomains.some(domain => urlLower.includes(domain));
+    if (isTrustedDomain && (urlLower.includes('mp4') || urlLower.includes('video'))) {
+      console.log(`✅ Trusted domain with video content detected: ${videoUrl}`);
+      return { isValid: true };
+    }
+
+    // If all validations fail
+    const errorMsg = `Unable to validate video format. Content-Type: ${contentType || 'missing'}, URL: ${videoUrl}. ` +
+                    `This may be due to missing Content-Type headers from your CDN/server. ` +
+                    `Please ensure the video is in MP4 format and your server returns proper Content-Type headers.`;
+    
+    console.log(`❌ Video validation failed: ${errorMsg}`);
+    return { 
+      isValid: false, 
+      error: errorMsg
+    };
   }
 
   /**

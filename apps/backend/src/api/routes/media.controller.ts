@@ -25,6 +25,7 @@ import { UploadFactory } from '@gitroom/nestjs-libraries/upload/upload.factory';
 import { VideoFormatService } from '@gitroom/nestjs-libraries/upload/video.format.service';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 
 @ApiTags('Media')
 @Controller('/media')
@@ -76,6 +77,32 @@ export class MediaController {
     return this._mediaService.saveFile(org.id, file.split('/').pop(), file);
   }
 
+  private async createTempFileIfNeeded(file: Express.Multer.File): Promise<{ filePath: string; shouldCleanup: boolean }> {
+    if (file.path && fs.existsSync(file.path)) {
+      return { filePath: file.path, shouldCleanup: false };
+    }
+
+    // Create temporary file from buffer
+    const tempDir = os.tmpdir();
+    const tempFileName = `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}${path.extname(file.originalname)}`;
+    const tempFilePath = path.join(tempDir, tempFileName);
+    
+    fs.writeFileSync(tempFilePath, file.buffer);
+    
+    return { filePath: tempFilePath, shouldCleanup: true };
+  }
+
+  private async cleanupTempFile(filePath: string, shouldCleanup: boolean): Promise<void> {
+    if (shouldCleanup && fs.existsSync(filePath)) {
+      try {
+        fs.unlinkSync(filePath);
+        console.log(`🗑️ Cleaned up temporary file: ${filePath}`);
+      } catch (error) {
+        console.warn(`⚠️ Failed to clean up temporary file: ${error}`);
+      }
+    }
+  }
+
   @Post('/upload-server')
   @UseInterceptors(FileInterceptor('file'))
   @UsePipes(new CustomFileValidationPipe())
@@ -84,38 +111,50 @@ export class MediaController {
     @UploadedFile() file: Express.Multer.File
   ) {
     let processedFile = file;
+    let tempFileInfo: { filePath: string; shouldCleanup: boolean } | null = null;
     
     // Check if file is a video that might need processing for Instagram
     if (this.isVideoFile(file)) {
       console.log(`📹 Video upload detected: ${file.originalname}`);
       
       try {
+        // Create temp file if needed for video processing
+        tempFileInfo = await this.createTempFileIfNeeded(file);
+        
         // Analyze if video meets Instagram standards
-        const validation = await this.videoFormatService.validateForInstagram(file.path, 'REELS');
+        const validation = await this.videoFormatService.validateForInstagram(tempFileInfo.filePath, 'REELS');
         
         if (!validation.isValid) {
           console.log(`🔧 Video needs processing for Instagram compatibility`);
           console.log(`Issues found: ${validation.issues.join(', ')}`);
           
           // Generate processed file path
-          const tempDir = path.dirname(file.path);
+          const tempDir = path.dirname(tempFileInfo.filePath);
           const originalName = path.parse(file.originalname);
           const processedPath = path.join(tempDir, `processed_${originalName.name}.mp4`);
           
           // Process video for Instagram compatibility
-          await this.videoFormatService.convertForInstagram(file.path, processedPath, 'REELS');
+          await this.videoFormatService.convertForInstagram(tempFileInfo.filePath, processedPath, 'REELS');
           
-          // Create new file object with processed video
+          // Read processed file and create new file object
+          const processedBuffer = fs.readFileSync(processedPath);
           const processedStats = fs.statSync(processedPath);
           processedFile = {
             ...file,
-            path: processedPath,
+            buffer: processedBuffer,
             filename: `processed_${originalName.name}.mp4`,
             originalname: `processed_${originalName.name}.mp4`,
             size: processedStats.size,
           };
           
           console.log(`✅ Video processed successfully: ${processedFile.originalname}`);
+          
+          // Clean up processed file
+          try {
+            fs.unlinkSync(processedPath);
+          } catch (error) {
+            console.warn(`⚠️ Failed to clean up processed file: ${error}`);
+          }
         } else {
           console.log(`✅ Video already Instagram compatible, no processing needed`);
         }
@@ -123,20 +162,15 @@ export class MediaController {
         console.error(`❌ Video processing failed:`, error.message);
         console.log(`📤 Uploading original file instead`);
         // Continue with original file if processing fails
+      } finally {
+        // Clean up temp file if it was created
+        if (tempFileInfo) {
+          await this.cleanupTempFile(tempFileInfo.filePath, tempFileInfo.shouldCleanup);
+        }
       }
     }
     
     const uploadedFile = await this.storage.uploadFile(processedFile);
-    
-    // Clean up processed file if it was created
-    if (processedFile !== file && processedFile.path !== file.path) {
-      try {
-        fs.unlinkSync(processedFile.path);
-        console.log(`🗑️ Cleaned up processed file: ${processedFile.path}`);
-      } catch (error) {
-        console.warn(`⚠️ Failed to clean up processed file: ${error}`);
-      }
-    }
     
     return this._mediaService.saveFile(
       org.id,
@@ -165,57 +199,64 @@ export class MediaController {
     @UploadedFile('file') file: Express.Multer.File
   ) {
     let processedFile = file;
+    let tempFileInfo: { filePath: string; shouldCleanup: boolean } | null = null;
     
     // Check if file is a video that might need processing for Instagram
     if (this.isVideoFile(file)) {
       console.log(`📹 Video upload detected (simple): ${file.originalname}`);
       
       try {
-        const validation = await this.videoFormatService.validateForInstagram(file.path, 'REELS');
+        // Create temp file if needed for video processing
+        tempFileInfo = await this.createTempFileIfNeeded(file);
+        
+        const validation = await this.videoFormatService.validateForInstagram(tempFileInfo.filePath, 'REELS');
         
         if (!validation.isValid) {
           console.log(`🔧 Video needs processing for Instagram compatibility`);
           console.log(`Issues found: ${validation.issues.join(', ')}`);
           
           // Generate processed file path
-          const tempDir = path.dirname(file.path);
+          const tempDir = path.dirname(tempFileInfo.filePath);
           const originalName = path.parse(file.originalname);
           const processedPath = path.join(tempDir, `processed_${originalName.name}.mp4`);
           
           // Process video for Instagram compatibility
-          await this.videoFormatService.convertForInstagram(file.path, processedPath, 'REELS');
+          await this.videoFormatService.convertForInstagram(tempFileInfo.filePath, processedPath, 'REELS');
           
-          // Create new file object with processed video
+          // Read processed file and create new file object
+          const processedBuffer = fs.readFileSync(processedPath);
           const processedStats = fs.statSync(processedPath);
           processedFile = {
             ...file,
-            path: processedPath,
+            buffer: processedBuffer,
             filename: `processed_${originalName.name}.mp4`,
             originalname: `processed_${originalName.name}.mp4`,
             size: processedStats.size,
           };
           
           console.log(`✅ Video processed successfully: ${processedFile.originalname}`);
+          
+          // Clean up processed file
+          try {
+            fs.unlinkSync(processedPath);
+          } catch (error) {
+            console.warn(`⚠️ Failed to clean up processed file: ${error}`);
+          }
         } else {
           console.log(`✅ Video already Instagram compatible, no processing needed`);
         }
       } catch (error: any) {
         console.error(`❌ Video processing failed:`, error.message);
         console.log(`📤 Uploading original file instead`);
+      } finally {
+        // Clean up temp file if it was created
+        if (tempFileInfo) {
+          await this.cleanupTempFile(tempFileInfo.filePath, tempFileInfo.shouldCleanup);
+        }
       }
     }
     
     const getFile = await this.storage.uploadFile(processedFile);
-    
-    // Clean up processed file if it was created
-    if (processedFile !== file && processedFile.path !== file.path) {
-      try {
-        fs.unlinkSync(processedFile.path);
-        console.log(`🗑️ Cleaned up processed file: ${processedFile.path}`);
-      } catch (error) {
-        console.warn(`⚠️ Failed to clean up processed file: ${error}`);
-      }
-    }
     
     return this._mediaService.saveFile(
       org.id,
