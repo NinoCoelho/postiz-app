@@ -1,4 +1,4 @@
-import React, { FC, useCallback, useMemo, useState } from 'react';
+import React, { FC, useCallback, useMemo, useState, useEffect } from 'react';
 import { useUser } from '@gitroom/frontend/components/layout/user.context';
 import { useRouter } from 'next/navigation';
 import { deleteDialog } from '@gitroom/react/helpers/delete.dialog';
@@ -19,27 +19,67 @@ import { AddEditModal } from '@gitroom/frontend/components/launches/add.edit.mod
 import dayjs from 'dayjs';
 import { Select } from '@gitroom/react/form/select';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
+
+interface PromptTemplate {
+  id: string;
+  templateKey: string;
+  name: string;
+  active: boolean;
+}
+
 const FirstStep: FC = (props) => {
   const { integrations, reloadCalendarView } = useCalendar();
   const modal = useModals();
   const fetch = useFetch();
   const [loading, setLoading] = useState(false);
   const [showStep, setShowStep] = useState('');
+  const [templates, setTemplates] = useState<PromptTemplate[]>([]);
   const t = useT();
+  
   const resolver = useMemo(() => {
     return classValidatorResolver(GeneratorDto);
   }, []);
+  
   const form = useForm({
     mode: 'all',
     resolver,
     values: {
       research: '',
       isPicture: false,
-      format: 'one_short',
-      tone: 'personal',
+      templateKey: 'one_short_personal' as const,
     },
   });
+  
   const [research] = form.watch(['research']);
+
+  // Fetch available templates
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      try {
+        const response = await fetch('/prompt-templates');
+        if (response.ok) {
+          const data = await response.json();
+          setTemplates(data.filter((t: PromptTemplate) => t.active));
+        }
+      } catch (error) {
+        console.error('Failed to fetch templates:', error);
+        // If API fails, use default templates
+        setTemplates([
+          { id: '1', templateKey: 'one_short_personal', name: 'Post Curto - Tom Pessoal', active: true },
+          { id: '2', templateKey: 'one_short_company', name: 'Post Curto - Tom Empresarial', active: true },
+          { id: '3', templateKey: 'one_long_personal', name: 'Post Longo - Tom Pessoal', active: true },
+          { id: '4', templateKey: 'one_long_company', name: 'Post Longo - Tom Empresarial', active: true },
+          { id: '5', templateKey: 'thread_short_personal', name: 'Thread Curta - Tom Pessoal', active: true },
+          { id: '6', templateKey: 'thread_short_company', name: 'Thread Curta - Tom Empresarial', active: true },
+          { id: '7', templateKey: 'thread_long_personal', name: 'Thread Longa - Tom Pessoal', active: true },
+          { id: '8', templateKey: 'thread_long_company', name: 'Thread Longa - Tom Empresarial', active: true },
+        ]);
+      }
+    };
+    
+    fetchTemplates();
+  }, [fetch]);
+
   const generateStep = useCallback(
     async (reader: ReadableStreamDefaultReader) => {
       const decoder = new TextDecoder('utf-8');
@@ -206,40 +246,13 @@ const FirstStep: FC = (props) => {
                 />
                 <Select
                   label={t('output_format', 'Output format')}
-                  {...form.register('format')}
+                  {...form.register('templateKey')}
                 >
-                  <option value="one_short">
-                    {t('short_post', 'Short post')}
-                  </option>
-                  <option value="one_long">
-                    {t('long_post', 'Long post')}
-                  </option>
-                  <option value="thread_short">
-                    {t(
-                      'a_thread_with_short_posts',
-                      'A thread with short posts'
-                    )}
-                  </option>
-                  <option value="thread_long">
-                    {t('a_thread_with_long_posts', 'A thread with long posts')}
-                  </option>
-                </Select>
-                <Select
-                  label={t('output_format', 'Output format')}
-                  {...form.register('tone')}
-                >
-                  <option value="personal">
-                    {t(
-                      'personal_voice_i_am_happy_to_announce',
-                      'Personal voice ("I am happy to announce")'
-                    )}
-                  </option>
-                  <option value="company">
-                    {t(
-                      'company_voice_we_are_happy_to_announce',
-                      'Company voice ("We are happy to announce")'
-                    )}
-                  </option>
+                  {templates.map((template) => (
+                    <option key={template.templateKey} value={template.templateKey}>
+                      {template.name}
+                    </option>
+                  ))}
                 </Select>
                 <div
                   className={clsx('flex items-center', loading && 'opacity-50')}

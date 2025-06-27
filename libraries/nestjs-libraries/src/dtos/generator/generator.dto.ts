@@ -9,10 +9,23 @@ export class GeneratorDto {
   isPicture: boolean;
 
   @IsString()
-  @IsIn(['one_short', 'one_long', 'thread_short', 'thread_long'])
-  format: 'one_short' | 'one_long' | 'thread_short' | 'thread_long';
-
-  @IsString()
-  @IsIn(['personal', 'company'])
-  tone: 'personal' | 'company';
+  @IsIn([
+    'one_short_personal',
+    'one_short_company', 
+    'one_long_personal',
+    'one_long_company',
+    'thread_short_personal',
+    'thread_short_company',
+    'thread_long_personal',
+    'thread_long_company'
+  ])
+  templateKey: 
+    | 'one_short_personal'
+    | 'one_short_company' 
+    | 'one_long_personal'
+    | 'one_long_company'
+    | 'thread_short_personal'
+    | 'thread_short_company'
+    | 'thread_long_personal'
+    | 'thread_long_company';
 }

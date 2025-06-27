@@ -35,6 +35,9 @@ import { McpService } from '@gitroom/nestjs-libraries/mcp/mcp.service';
 import { McpController } from '@gitroom/backend/api/routes/mcp.controller';
 import { SetsController } from '@gitroom/backend/api/routes/sets.controller';
 import { ThirdPartyController } from '@gitroom/backend/api/routes/third-party.controller';
+import { PromptTemplatesController } from '@gitroom/backend/api/routes/prompt-templates.controller';
+import { PromptTemplatesService } from '@gitroom/nestjs-libraries/database/prisma/prompt-templates/prompt-templates.service';
+import { PromptTemplatesRepository } from '@gitroom/nestjs-libraries/database/prisma/prompt-templates/prompt-templates.repository';
 
 const authenticatedController = [
   UsersController,
@@ -54,6 +57,7 @@ const authenticatedController = [
   AutopostController,
   SetsController,
   ThirdPartyController,
+  PromptTemplatesController,
 ];
 @Module({
   imports: [UploadModule],
@@ -79,6 +83,8 @@ const authenticatedController = [
     ShortLinkService,
     Nowpayments,
     McpService,
+    PromptTemplatesService,
+    PromptTemplatesRepository,
   ],
   get exports() {
     return [...this.imports, ...this.providers];

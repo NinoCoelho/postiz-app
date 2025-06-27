@@ -6,12 +6,13 @@ import { RefreshTokens } from './tasks/refresh.tokens';
 import { BullMqModule } from '@gitroom/nestjs-libraries/bull-mq-transport-new/bull.mq.module';
 import { ConfigurationTask } from './tasks/configuration';
 import { AgentRun } from './tasks/agent.run';
+import { InitTemplatesCommand } from './tasks/init-templates';
 import { AgentModule } from '@gitroom/nestjs-libraries/agent/agent.module';
 
 @Module({
   imports: [ExternalCommandModule, DatabaseModule, BullMqModule, AgentModule],
   controllers: [],
-  providers: [CheckStars, RefreshTokens, ConfigurationTask, AgentRun],
+  providers: [CheckStars, RefreshTokens, ConfigurationTask, AgentRun, InitTemplatesCommand],
   get exports() {
     return [...this.imports, ...this.providers];
   },

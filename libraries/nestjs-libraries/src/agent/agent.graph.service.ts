@@ -15,6 +15,7 @@ import { z } from 'zod';
 import { MediaService } from '@gitroom/nestjs-libraries/database/prisma/media/media.service';
 import { UploadFactory } from '@gitroom/nestjs-libraries/upload/upload.factory';
 import { GeneratorDto } from '@gitroom/nestjs-libraries/dtos/generator/generator.dto';
+import { PromptTemplatesService } from '@gitroom/nestjs-libraries/database/prisma/prompt-templates/prompt-templates.service';
 
 const tools = !process.env.TAVILY_API_KEY
   ? []
@@ -41,8 +42,15 @@ interface WorkflowChannelsState {
   category?: string;
   topic?: string;
   date?: string;
-  format: 'one_short' | 'one_long' | 'thread_short' | 'thread_long';
-  tone: 'personal' | 'company';
+  templateKey: 
+    | 'one_short_personal'
+    | 'one_short_company' 
+    | 'one_long_personal'
+    | 'one_long_company'
+    | 'thread_short_personal'
+    | 'thread_short_company'
+    | 'thread_long_personal'
+    | 'thread_long_company';
   content?: {
     content: string;
     website?: string;
@@ -106,19 +114,31 @@ export class AgentGraphService {
   private storage = UploadFactory.createStorage();
   constructor(
     private _postsService: PostsService,
-    private _mediaService: MediaService
+    private _mediaService: MediaService,
+    private _promptTemplatesService: PromptTemplatesService
   ) {}
+
+  private getFormatFromTemplateKey(templateKey: string): string {
+    // Extract format from templateKey (e.g., 'one_short_personal' -> 'one_short')
+    const parts = templateKey.split('_');
+    return parts.slice(0, -1).join('_');
+  }
+
+  private getToneFromTemplateKey(templateKey: string): string {
+    // Extract tone from templateKey (e.g., 'one_short_personal' -> 'personal')
+    const parts = templateKey.split('_');
+    return parts[parts.length - 1];
+  }
   static state = () =>
     new StateGraph<WorkflowChannelsState>({
       channels: {
         messages: {
-          reducer: (currentState, updateValue) =>
+          reducer: (currentState: any, updateValue: any) =>
             currentState.concat(updateValue),
-          default: () => [],
+          default: (): any[] => [],
         },
         fresearch: null,
-        format: null,
-        tone: null,
+        templateKey: null,
         question: null,
         orgId: null,
         hook: null,
@@ -133,14 +153,25 @@ export class AgentGraphService {
 
   async startCall(state: WorkflowChannelsState) {
     const runTools = model.bindTools(tools);
-    const response = await ChatPromptTemplate.fromTemplate(
-      `
-    Today is ${dayjs().format()}, You are an assistant that gets a social media post or requests for a social media post.
-    You research should be on the most possible recent data.
-    You concat the text of the request together with an internet research based on the text.
-    {text}
-    `
-    )
+    
+    // Ensure default templates exist
+    await this._promptTemplatesService.ensureDefaultTemplatesExist(state.orgId);
+    
+    // Get the research prompt from template
+    const format = this.getFormatFromTemplateKey(state.templateKey);
+    const tone = this.getToneFromTemplateKey(state.templateKey);
+    const promptTemplate = await this._promptTemplatesService.getResearchPrompt(
+      state.orgId,
+      format,
+      tone,
+      {
+        request: String(state.messages[state.messages.length - 1].content),
+        research: '',
+        currentDate: dayjs().format(),
+      }
+    );
+    
+    const response = await ChatPromptTemplate.fromTemplate(promptTemplate)
       .pipe(runTools)
       .invoke({
         text: state.messages[state.messages.length - 1].content,
@@ -212,34 +243,23 @@ export class AgentGraphService {
 
   async generateHook(state: WorkflowChannelsState) {
     const structuredOutput = model.withStructuredOutput(hook);
-    const { hook: outputHook } = await ChatPromptTemplate.fromTemplate(
-      `
-        You are an assistant that gets content for a social media post, and generate only the hook.
-        The hook is the 1-2 sentences of the post that will be used to grab the attention of the reader.
-        You will be provided existing hooks you should use as inspiration.
-        - Avoid weird hook that starts with "Discover the secret...", "The best...", "The most...", "The top..."
-        - Make sure it sounds ${state.tone}
-        - Use ${state.tone === 'personal' ? '1st' : '3rd'} person mode
-        - Make sure it's engaging
-        - Don't be cringy
-        - Use simple english
-        - Make sure you add "\n" between the lines
-        - Don't take the hook from "request of the user"
-
-        <!-- BEGIN request of the user -->
-        {request}
-        <!-- END request of the user -->
-        
-        <!-- BEGIN existing hooks -->
-        {hooks}
-        <!-- END existing hooks -->
-        
-        <!-- BEGIN current content -->
-        {text}
-        <!-- END current content -->
-       
-      `
-    )
+    
+    // Get the hook prompt from template
+    const format = this.getFormatFromTemplateKey(state.templateKey);
+    const tone = this.getToneFromTemplateKey(state.templateKey);
+    const promptTemplate = await this._promptTemplatesService.getHookPrompt(
+      state.orgId,
+      format,
+      tone,
+      {
+        request: String(state.messages[0].content),
+        research: String(state.fresearch),
+        popularHooks: state.popularPosts!.map((p) => p.hook).join('\n'),
+        currentDate: dayjs().format(),
+      }
+    );
+    
+    const { hook: outputHook } = await ChatPromptTemplate.fromTemplate(promptTemplate)
       .pipe(structuredOutput)
       .invoke({
         request: state.messages[0].content,
@@ -253,44 +273,26 @@ export class AgentGraphService {
   }
 
   async generateContent(state: WorkflowChannelsState) {
+    const format = this.getFormatFromTemplateKey(state.templateKey);
+    const tone = this.getToneFromTemplateKey(state.templateKey);
     const structuredOutput = model.withStructuredOutput(
-      contentZod(!!state.isPicture, state.format)
+      contentZod(!!state.isPicture, format as any)
     );
-    const { content: outputContent } = await ChatPromptTemplate.fromTemplate(
-      `
-        You are an assistant that gets existing hook of a social media, content and generate only the content.
-        - Don't add any hashtags
-        - Make sure it sounds ${state.tone}
-        - Use ${state.tone === 'personal' ? '1st' : '3rd'} person mode
-        - ${
-          state.format === 'one_short' || state.format === 'thread_short'
-            ? 'Post should be maximum 200 chars to fit twitter'
-            : 'Post should be long'
-        }
-        - ${
-          state.format === 'one_short' || state.format === 'one_long'
-            ? 'Post should have only 1 item'
-            : 'Post should have minimum 2 items'
-        }
-        - Use the hook as inspiration
-        - Make sure it's engaging
-        - Don't be cringy
-        - Use simple english
-        - The Content should not contain the hook
-        - Try to put some call to action at the end of the post
-        - Make sure you add "\n" between the lines
-        - Add "\n" after every "."
-        
-        Hook:
-        {hook}
-        
-        User request:
-        {request}
-        
-        current content information:
-        {information}
-      `
-    )
+    
+    // Get the content prompt from template
+    const promptTemplate = await this._promptTemplatesService.getContentPrompt(
+      state.orgId,
+      format,
+      tone,
+      {
+        request: String(state.messages[0].content),
+        research: String(state.fresearch),
+        hook: state.hook!,
+        currentDate: dayjs().format(),
+      }
+    );
+    
+    const { content: outputContent } = await ChatPromptTemplate.fromTemplate(promptTemplate)
       .pipe(structuredOutput)
       .invoke({
         hook: state.hook,
@@ -304,7 +306,8 @@ export class AgentGraphService {
   }
 
   async fixArray(state: WorkflowChannelsState) {
-    if (state.format === 'one_short' || state.format === 'one_long') {
+    const format = this.getFormatFromTemplateKey(state.templateKey);
+    if (format === 'one_short' || format === 'one_long') {
       return {
         content: [state.content],
       };
@@ -408,8 +411,7 @@ export class AgentGraphService {
       {
         messages: [new HumanMessage(body.research)],
         isPicture: body.isPicture,
-        format: body.format,
-        tone: body.tone,
+        templateKey: body.templateKey,
         orgId,
       },
       {

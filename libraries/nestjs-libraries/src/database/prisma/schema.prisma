@@ -39,6 +39,7 @@ model Organization {
   autoPost          AutoPost[]
   sets              Sets[]
   thirdParty        ThirdParty[]
+  promptTemplates   PromptTemplates[]
 }
 
 model Tags {
@@ -621,13 +622,32 @@ model ThirdParty {
   name           String
   internalId     String
   apiKey         String
+  deletedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, internalId])
+  @@index([organizationId])
+  @@index([deletedAt])
+}
+
+model PromptTemplates {
+  id             String       @id @default(uuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  templateKey    String       // 'one_short_personal', 'thread_long_company', etc.
+  name           String       // Nome amigável para interface
+  researchPrompt String       @db.Text // Como pesquisar o conteúdo
+  hookPrompt     String       @db.Text // Como gerar o gancho
+  contentPrompt  String       @db.Text // Como gerar o conteúdo
+  imagePrompt    String?      @db.Text // Como gerar descrição de imagem
+  active         Boolean      @default(true)
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
   deletedAt      DateTime?
 
-  @@index([organizationId])
-  @@index([deletedAt])
-  @@unique([organizationId, internalId])
+  @@unique([organizationId, templateKey, deletedAt])
+  @@index([organizationId, active, deletedAt])
 }
 
 enum OrderStatus {
