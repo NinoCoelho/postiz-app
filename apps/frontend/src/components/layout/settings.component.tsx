@@ -26,6 +26,7 @@ import { TopTitle } from '@gitroom/frontend/components/launches/helpers/top.titl
 import { Tabs } from '@mantine/core';
 import { SignaturesComponent } from '@gitroom/frontend/components/settings/signatures.component';
 import { Autopost } from '@gitroom/frontend/components/autopost/autopost';
+import { PromptsComponent } from '@gitroom/frontend/components/settings/prompts.component';
 import { useT } from '@gitroom/react/translation/get.transation.service.client';
 export const SettingsPopup: FC<{
   getRef?: Ref<any>;
@@ -131,6 +132,9 @@ export const SettingsPopup: FC<{
               )}
               <Tabs.Tab value="sets">{t('sets', 'Sets')}</Tabs.Tab>
               {user?.tier.current !== 'FREE' && (
+                <Tabs.Tab value="prompts">{t('prompts', 'Prompts')}</Tabs.Tab>
+              )}
+              {user?.tier.current !== 'FREE' && (
                 <Tabs.Tab value="signatures">
                   {t('signatures', 'Signatures')}
                 </Tabs.Tab>
@@ -161,6 +165,12 @@ export const SettingsPopup: FC<{
             {user?.tier.current !== 'FREE' && (
               <Tabs.Panel value="sets" pt="md">
                 <Sets />
+              </Tabs.Panel>
+            )}
+
+            {user?.tier.current !== 'FREE' && (
+              <Tabs.Panel value="prompts" pt="md">
+                <PromptsComponent />
               </Tabs.Panel>
             )}
 
